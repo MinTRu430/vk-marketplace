@@ -8,42 +8,56 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type AdRepo struct {
+type AdDB struct {
 	db *pgxpool.Pool
 }
 
-func NewAdRepo(db *pgxpool.Pool) *AdRepo {
-	return &AdRepo{db: db}
+func NewAdRepo(db *pgxpool.Pool) *AdDB {
+	return &AdDB{db: db}
 }
 
-func (r *AdRepo) Create(ctx context.Context, ad *Ad) (*Ad, error) {
+func (r *AdDB) Create(ctx context.Context, ad *Ad) (*Ad, error) {
 	err := r.db.QueryRow(ctx, `
-        INSERT INTO ads (user_id, title, description, image_url, price)
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING id
-    `, ad.UserID, ad.Title, ad.Description, ad.ImageURL, ad.Price).Scan(&ad.ID)
+		INSERT INTO ads (user_id, title, description, image_url, price, squad_id)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id
+	`, ad.UserID, ad.Title, ad.Description, ad.ImageURL, ad.Price, ad.SquadID).Scan(&ad.ID)
+
 	if err != nil {
 		return nil, fmt.Errorf("insert ad: %w", err)
 	}
+
 	return ad, nil
 }
 
-type ListAdsParams struct {
-	Limit      int
-	Offset     int
-	SortBy     string  // "created_at" или "price"
-	Order      string  // "asc" или "desc"
-	MinPrice   float64 // 0 если не задан
-	MaxPrice   float64 // 0 если не задан
-	UserFilter bool    // фильтровать по userID
-	UserID     uint32
-}
+func (r *AdDB) List(ctx context.Context, params ListAdsParams) ([]listAdsResponseItem, error) {
+	validSortBy := map[string]string{
+		"created_at": "ads.created_at",
+		"price":      "ads.price",
+	}
+	validOrder := map[string]string{
+		"ASC":  "ASC",
+		"DESC": "DESC",
+	}
 
-func (r *AdRepo) List(ctx context.Context, params ListAdsParams) ([]listAdsResponseItem, error) {
+	sortBy, ok := validSortBy[params.SortBy]
+	if !ok {
+		sortBy = "ads.created_at"
+	}
+
+	order, ok := validOrder[strings.ToUpper(params.Order)]
+	if !ok {
+		order = "DESC"
+	}
+
 	args := []interface{}{}
 	whereClauses := []string{}
 
-	// Фильтр по цене
+	if params.SquadFilter {
+		args = append(args, params.SquadID)
+		whereClauses = append(whereClauses, fmt.Sprintf("ads.squad_id = $%d", len(args)))
+	}
+
 	if params.MinPrice > 0 {
 		args = append(args, params.MinPrice)
 		whereClauses = append(whereClauses, fmt.Sprintf("price >= $%d", len(args)))
@@ -53,7 +67,6 @@ func (r *AdRepo) List(ctx context.Context, params ListAdsParams) ([]listAdsRespo
 		whereClauses = append(whereClauses, fmt.Sprintf("price <= $%d", len(args)))
 	}
 
-	// Фильтр по автору (если нужно)
 	if params.UserFilter {
 		args = append(args, params.UserID)
 		whereClauses = append(whereClauses, fmt.Sprintf("user_id = $%d", len(args)))
@@ -64,16 +77,15 @@ func (r *AdRepo) List(ctx context.Context, params ListAdsParams) ([]listAdsRespo
 		whereSQL = "WHERE " + strings.Join(whereClauses, " AND ")
 	}
 
-	// Формируем запрос с JOIN к таблице пользователей чтобы получить login
 	query := fmt.Sprintf(`
-		SELECT
-			ads.id, ads.title, ads.description, ads.image_url, ads.price, users.login
-		FROM ads
-		JOIN users ON ads.user_id = users.id
-		%s
-		ORDER BY %s %s
-		LIMIT $%d OFFSET $%d
-	`, whereSQL, params.SortBy, params.Order, len(args)+1, len(args)+2)
+			SELECT
+				ads.id, ads.title, ads.description, ads.image_url, ads.price, users.login
+			FROM ads
+			JOIN users ON ads.user_id = users.id
+			%s
+			ORDER BY %s %s
+			LIMIT $%d OFFSET $%d
+		`, whereSQL, sortBy, order, len(args)+1, len(args)+2)
 
 	args = append(args, params.Limit, params.Offset)
 
@@ -92,5 +104,6 @@ func (r *AdRepo) List(ctx context.Context, params ListAdsParams) ([]listAdsRespo
 		}
 		ads = append(ads, ad)
 	}
+
 	return ads, nil
 }

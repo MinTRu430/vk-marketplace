@@ -2,7 +2,7 @@ CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     login VARCHAR(255) NOT NULL UNIQUE,
     password TEXT NOT NULL,
-    token_version SMALLINT NOT NULL DEFAULT '0'
+    squad_id INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -20,5 +20,6 @@ CREATE TABLE ads (
     description TEXT,
     image_url TEXT,
     price NUMERIC(10, 2) NOT NULL,
-    created_at TIMESTAMP DEFAULT now()
+    created_at TIMESTAMP DEFAULT now(),
+    squad_id INTEGER
 );

@@ -22,6 +22,23 @@ func NewSessionsDB(db *pgxpool.Pool) *SessionsDB {
 	}
 }
 
+func (sm *SessionsDB) Create(ctx context.Context, w http.ResponseWriter, user UserInterface) error {
+	sessID, err := randutils.GenerateSessionID()
+	if err != nil {
+		return err
+	}
+
+	_, err = sm.DB.Exec(ctx, "INSERT INTO sessions(id, user_id) VALUES ($1, $2)", sessID, user.GetID())
+	if err != nil {
+		return err
+	}
+
+	w.Header().Set("Authorization", "Bearer "+sessID)
+	w.Header().Set("X-Session-Expires", time.Now().Add(24*time.Hour).Format(time.RFC3339))
+
+	return nil
+}
+
 func (sm *SessionsDB) Check(r *http.Request) (*Session, error) {
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
@@ -49,25 +66,6 @@ func (sm *SessionsDB) Check(r *http.Request) (*Session, error) {
 
 	sess.ID = token
 	return sess, nil
-}
-
-func (sm *SessionsDB) Create(ctx context.Context, w http.ResponseWriter, user UserInterface) error {
-	sessID, err := randutils.GenerateSessionID()
-	if err != nil {
-		log.Println("CreateSession failed to generate session ID:", err)
-		return err
-	}
-
-	_, err = sm.DB.Exec(ctx, "INSERT INTO sessions(id, user_id) VALUES ($1, $2)", sessID, user.GetID())
-	if err != nil {
-		log.Println("CreateSession db error:", err)
-		return err
-	}
-
-	w.Header().Set("Authorization", "Bearer "+sessID)
-	w.Header().Set("X-Session-Expires", time.Now().Add(24*time.Hour).Format(time.RFC3339))
-
-	return nil
 }
 
 func (sm *SessionsDB) DestroyCurrent(w http.ResponseWriter, r *http.Request) error {

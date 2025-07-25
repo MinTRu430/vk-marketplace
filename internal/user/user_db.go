@@ -6,35 +6,31 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"VK/internal/utils/hashutils"
 )
 
 var (
-	ErrUserNotFound = errors.New("No user record found")
-	ErrBadPass      = errors.New("Bad password")
-	ErrUserExists   = errors.New("User Exists")
+	ErrUserNotFound = errors.New("no user record found")
+	ErrBadPass      = errors.New("bad password")
+	ErrUserExists   = errors.New("user Exists")
 )
 
 type UserDB struct {
 	db *pgxpool.Pool
 }
 
-func NewUserRepository(db *pgxpool.Pool) *UserDB {
+func NewUserDB(db *pgxpool.Pool) *UserDB {
 	return &UserDB{
 		db: db,
 	}
 }
 
 func (u *UserDB) Create(ctx context.Context, login, passIn string) (*User, error) {
-
 	pass := hashutils.HashPassword(passIn)
 
-	user := &User{
-		Login: login,
-	}
+	user := &User{}
 
 	err := u.db.QueryRow(ctx, `
 		INSERT INTO users (login, password) 
@@ -42,8 +38,7 @@ func (u *UserDB) Create(ctx context.Context, login, passIn string) (*User, error
 		RETURNING id, login
 	`, login, pass).Scan(&user.ID, &user.Login)
 	if err != nil {
-		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		if errors.Is(err, ErrUserExists) {
 			return nil, ErrUserExists
 		}
 		return nil, fmt.Errorf("insert error: %w", err)

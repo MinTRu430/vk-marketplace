@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
 
@@ -18,39 +17,43 @@ var (
 
 func main() {
 	ctx := context.Background()
-	fmt.Println("start vk")
+	log.Println("start vk")
 
 	db, err := dbutils.NewPostresPool(ctx, dsn)
 	if err != nil {
 		log.Fatalln("DB connection failed:", err)
 	}
 	defer db.Close()
+	log.Println("database connected")
 
-	userDB := user.NewUserRepository(db)
+	userDB := user.NewUserDB(db)
 	sessionDB := session.NewSessionsDB(db)
-	adRepo := ad.NewAdRepo(db)
+	adDB := ad.NewAdRepo(db)
 
 	u := &user.UserHandler{
-		Sessions: sessionDB,
-		UserDB:   userDB,
+		SessionsDB: sessionDB,
+		UserDB:     userDB,
 	}
 
 	ad := &ad.AdHandler{
-		Ads:      adRepo,
+		Ads:      adDB,
 		Sessions: sessionDB,
 	}
 
+	// authMiddleware := middleware.NewAuthMiddleware(sessionDB)
+
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/user/reg", u.Registration)
-	mux.HandleFunc("/user/login", u.Login)
-	mux.HandleFunc("/user/logout", u.Logout)
+	mux.HandleFunc("/signin", u.Registration)
+	mux.HandleFunc("/login", u.Login)
 
-	mux.HandleFunc("/ads/create", ad.CreateAd)
-	mux.HandleFunc("/ads/list", ad.ListAds)
+	mux.HandleFunc("/create", ad.CreateAd)
+	mux.HandleFunc("/", ad.ListAds)
 
-	listenAddr := ":8080"
-	log.Printf("starting listening server at %s", listenAddr)
-	http.ListenAndServe(listenAddr, mux)
+	log.Println("Starting server at :8080")
+	err = http.ListenAndServe(":8080", mux)
+	if err != nil {
+		log.Fatal("Server failed: ", err)
+	}
 
 }

@@ -8,8 +8,16 @@ import (
 	"strings"
 )
 
+// // import (
+// // 	"VK/internal/session"
+// // 	"encoding/json"
+// // 	"net/http"
+// // 	"strconv"
+// // 	"strings"
+// // )
+
 type AdHandler struct {
-	Ads      AdRepository
+	Ads      AdInterface
 	Sessions session.SessionManager
 }
 
@@ -49,6 +57,7 @@ func (h *AdHandler) CreateAd(w http.ResponseWriter, r *http.Request) {
 		Description: req.Description,
 		ImageURL:    req.ImageURL,
 		Price:       req.Price,
+		SquadID:     sess.SquadID,
 	}
 
 	createdAd, err := h.Ads.Create(r.Context(), ad)
@@ -79,12 +88,12 @@ func (h *AdHandler) ListAds(w http.ResponseWriter, r *http.Request) {
 
 	q := r.URL.Query()
 
-	page, _ := strconv.Atoi(q.Get("page"))
-	if page < 1 {
+	page, err := strconv.Atoi(q.Get("page"))
+	if err != nil || page < 1 {
 		page = 1
 	}
-	limit, _ := strconv.Atoi(q.Get("limit"))
-	if limit < 1 || limit > 100 {
+	limit, err := strconv.Atoi(q.Get("limit"))
+	if err != nil || limit < 1 || limit > 100 {
 		limit = 20
 	}
 	offset := (page - 1) * limit
@@ -93,33 +102,60 @@ func (h *AdHandler) ListAds(w http.ResponseWriter, r *http.Request) {
 	if sortBy != "price" && sortBy != "created_at" {
 		sortBy = "created_at"
 	}
+
 	order := strings.ToLower(q.Get("order"))
 	if order != "asc" && order != "desc" {
 		order = "desc"
 	}
+	order = strings.ToUpper(order)
 
-	minPrice, _ := strconv.ParseFloat(q.Get("min_price"), 64)
-	maxPrice, _ := strconv.ParseFloat(q.Get("max_price"), 64)
+	minPrice, err := strconv.ParseFloat(q.Get("min_price"), 64)
+	if err != nil {
+		minPrice = 0
+	}
+	maxPrice, err := strconv.ParseFloat(q.Get("max_price"), 64)
+	if err != nil {
+		maxPrice = 0
+	}
+
+	if maxPrice > 0 && maxPrice < minPrice {
+		http.Error(w, "max_price must be greater or equal to min_price", http.StatusBadRequest)
+		return
+	}
 
 	var userID uint32
 	var isAuthUser bool
 	if strings.ToLower(q.Get("my")) == "true" {
 		sess, err := h.Sessions.Check(r)
+		if err != nil {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		userID = sess.UserID
+		isAuthUser = true
+	}
+
+	squadFilter := false
+	var squadID uint32
+	if strings.ToLower(q.Get("squad")) == "true" {
+		sess, err := h.Sessions.Check(r)
 		if err == nil {
-			userID = sess.UserID
-			isAuthUser = true
+			squadID = sess.SquadID
+			squadFilter = true
 		}
 	}
 
 	ads, err := h.Ads.List(r.Context(), ListAdsParams{
-		Limit:      limit,
-		Offset:     offset,
-		SortBy:     sortBy,
-		Order:      order,
-		MinPrice:   minPrice,
-		MaxPrice:   maxPrice,
-		UserFilter: isAuthUser,
-		UserID:     userID,
+		Limit:       limit,
+		Offset:      offset,
+		SortBy:      sortBy,
+		Order:       order,
+		MinPrice:    minPrice,
+		MaxPrice:    maxPrice,
+		UserFilter:  isAuthUser,
+		UserID:      userID,
+		SquadFilter: squadFilter,
+		SquadID:     squadID,
 	})
 	if err != nil {
 		http.Error(w, "Failed to get ads", http.StatusInternalServerError)

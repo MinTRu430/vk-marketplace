@@ -1,8 +1,10 @@
 package ad
 
-import "context"
+import (
+	"context"
+)
 
-type AdRepository interface {
+type AdInterface interface {
 	Create(ctx context.Context, ad *Ad) (*Ad, error)
 	List(ctx context.Context, params ListAdsParams) ([]listAdsResponseItem, error)
 }
@@ -14,4 +16,18 @@ type Ad struct {
 	Description string  `json:"description"`
 	ImageURL    string  `json:"image_url"`
 	Price       float64 `json:"price"`
+	SquadID     uint32  `json:"squad_id"`
+}
+
+type ListAdsParams struct {
+	Limit       int
+	Offset      int
+	SortBy      string
+	Order       string
+	MinPrice    float64
+	MaxPrice    float64
+	UserFilter  bool
+	UserID      uint32
+	SquadFilter bool
+	SquadID     uint32
 }
