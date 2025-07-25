@@ -72,12 +72,13 @@ func (h *AdHandler) CreateAd(w http.ResponseWriter, r *http.Request) {
 }
 
 type listAdsResponseItem struct {
-	ID          uint32  `json:"id"`
-	Title       string  `json:"title"`
-	Description string  `json:"description"`
-	ImageURL    string  `json:"image_url"`
-	Price       float64 `json:"price"`
-	AuthorLogin string  `json:"author_login"`
+	ID          int64
+	Title       string
+	Description string
+	ImageURL    string
+	Price       float64
+	AuthorLogin string
+	IsOwner     bool
 }
 
 func (h *AdHandler) ListAds(w http.ResponseWriter, r *http.Request) {
@@ -123,39 +124,21 @@ func (h *AdHandler) ListAds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var userID uint32
-	var isAuthUser bool
-	if strings.ToLower(q.Get("my")) == "true" {
-		sess, err := h.Sessions.Check(r)
-		if err != nil {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
+	var userID uint32 = 0
+	sess, err := h.Sessions.Check(r)
+	if err == nil {
 		userID = sess.UserID
-		isAuthUser = true
-	}
-
-	squadFilter := false
-	var squadID uint32
-	if strings.ToLower(q.Get("squad")) == "true" {
-		sess, err := h.Sessions.Check(r)
-		if err == nil {
-			squadID = sess.SquadID
-			squadFilter = true
-		}
 	}
 
 	ads, err := h.Ads.List(r.Context(), ListAdsParams{
-		Limit:       limit,
-		Offset:      offset,
-		SortBy:      sortBy,
-		Order:       order,
-		MinPrice:    minPrice,
-		MaxPrice:    maxPrice,
-		UserFilter:  isAuthUser,
-		UserID:      userID,
-		SquadFilter: squadFilter,
-		SquadID:     squadID,
+		Limit:      limit,
+		Offset:     offset,
+		SortBy:     sortBy,
+		Order:      order,
+		MinPrice:   minPrice,
+		MaxPrice:   maxPrice,
+		UserFilter: false,
+		UserID:     userID,
 	})
 	if err != nil {
 		http.Error(w, "Failed to get ads", http.StatusInternalServerError)

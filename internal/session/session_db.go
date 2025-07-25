@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -22,21 +21,18 @@ func NewSessionsDB(db *pgxpool.Pool) *SessionsDB {
 	}
 }
 
-func (sm *SessionsDB) Create(ctx context.Context, w http.ResponseWriter, user UserInterface) error {
+func (sm *SessionsDB) Create(ctx context.Context, w http.ResponseWriter, user UserInterface) (string, error) {
 	sessID, err := randutils.GenerateSessionID()
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	_, err = sm.DB.Exec(ctx, "INSERT INTO sessions(id, user_id) VALUES ($1, $2)", sessID, user.GetID())
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	w.Header().Set("Authorization", "Bearer "+sessID)
-	w.Header().Set("X-Session-Expires", time.Now().Add(24*time.Hour).Format(time.RFC3339))
-
-	return nil
+	return sessID, nil
 }
 
 func (sm *SessionsDB) Check(r *http.Request) (*Session, error) {
@@ -69,7 +65,7 @@ func (sm *SessionsDB) Check(r *http.Request) (*Session, error) {
 }
 
 func (sm *SessionsDB) DestroyCurrent(w http.ResponseWriter, r *http.Request) error {
-	sess, err := sm.Check(r) // Use Check to get session from Authorization header
+	sess, err := sm.Check(r)
 	if err != nil {
 		log.Println("DestroyCurrent no valid session:", err)
 		return err

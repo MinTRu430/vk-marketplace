@@ -3,12 +3,13 @@ package user
 import (
 	"VK/internal/session"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"regexp"
+	"time"
 )
 
 type UserHandler struct {
-	// Tmpl      Templater
 	SessionsDB session.SessionManager
 	UserDB     *UserDB
 }
@@ -92,11 +93,19 @@ func (uh *UserHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := uh.SessionsDB.Create(r.Context(), w, user); err != nil {
+	sessID, err := uh.SessionsDB.Create(r.Context(), w, user)
+	if err != nil {
 		http.Error(w, "Session error", http.StatusInternalServerError)
 		return
 	}
+	fmt.Println(sessID)
 
+	w.Header().Set("Authorization", "Bearer "+sessID)
+	w.Header().Set("X-Session-Expires", time.Now().Add(time.Duration(time.Now().Year())).Format(time.RFC3339))
+	fmt.Println("Response headers:")
+	for k, v := range w.Header() {
+		fmt.Println(k, v)
+	}
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"id":    user.ID,

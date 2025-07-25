@@ -22,7 +22,7 @@ type UserInterface interface { // Потом подумать о его суще
 
 type SessionManager interface {
 	Check(*http.Request) (*Session, error)
-	Create(context.Context, http.ResponseWriter, UserInterface) error
+	Create(context.Context, http.ResponseWriter, UserInterface) (string, error)
 	DestroyCurrent(http.ResponseWriter, *http.Request) error
 	DestroyAll(context.Context, http.ResponseWriter, UserInterface) error
 }

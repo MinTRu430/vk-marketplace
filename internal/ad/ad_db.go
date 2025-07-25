@@ -29,7 +29,6 @@ func (r *AdDB) Create(ctx context.Context, ad *Ad) (*Ad, error) {
 
 	return ad, nil
 }
-
 func (r *AdDB) List(ctx context.Context, params ListAdsParams) ([]listAdsResponseItem, error) {
 	validSortBy := map[string]string{
 		"created_at": "ads.created_at",
@@ -60,16 +59,11 @@ func (r *AdDB) List(ctx context.Context, params ListAdsParams) ([]listAdsRespons
 
 	if params.MinPrice > 0 {
 		args = append(args, params.MinPrice)
-		whereClauses = append(whereClauses, fmt.Sprintf("price >= $%d", len(args)))
+		whereClauses = append(whereClauses, fmt.Sprintf("ads.price >= $%d", len(args)))
 	}
 	if params.MaxPrice > 0 && params.MaxPrice >= params.MinPrice {
 		args = append(args, params.MaxPrice)
-		whereClauses = append(whereClauses, fmt.Sprintf("price <= $%d", len(args)))
-	}
-
-	if params.UserFilter {
-		args = append(args, params.UserID)
-		whereClauses = append(whereClauses, fmt.Sprintf("user_id = $%d", len(args)))
+		whereClauses = append(whereClauses, fmt.Sprintf("ads.price <= $%d", len(args)))
 	}
 
 	whereSQL := ""
@@ -77,15 +71,27 @@ func (r *AdDB) List(ctx context.Context, params ListAdsParams) ([]listAdsRespons
 		whereSQL = "WHERE " + strings.Join(whereClauses, " AND ")
 	}
 
+	currentUserID := params.UserID
+	args = append([]interface{}{currentUserID}, args...)
+
+	limitPos := len(args) + 1
+	offsetPos := len(args) + 2
+
 	query := fmt.Sprintf(`
-			SELECT
-				ads.id, ads.title, ads.description, ads.image_url, ads.price, users.login
-			FROM ads
-			JOIN users ON ads.user_id = users.id
-			%s
-			ORDER BY %s %s
-			LIMIT $%d OFFSET $%d
-		`, whereSQL, sortBy, order, len(args)+1, len(args)+2)
+		SELECT
+			ads.id,
+			ads.title,
+			ads.description,
+			ads.image_url,
+			ads.price,
+			CASE WHEN $1 = 0 THEN '' ELSE users.login END AS author_login,
+			CASE WHEN ads.user_id = $1 THEN TRUE ELSE FALSE END AS is_owner
+		FROM ads
+		JOIN users ON ads.user_id = users.id
+		%s
+		ORDER BY %s %s
+		LIMIT $%d OFFSET $%d
+	`, whereSQL, sortBy, order, limitPos, offsetPos)
 
 	args = append(args, params.Limit, params.Offset)
 
@@ -98,7 +104,15 @@ func (r *AdDB) List(ctx context.Context, params ListAdsParams) ([]listAdsRespons
 	var ads []listAdsResponseItem
 	for rows.Next() {
 		var ad listAdsResponseItem
-		err := rows.Scan(&ad.ID, &ad.Title, &ad.Description, &ad.ImageURL, &ad.Price, &ad.AuthorLogin)
+		err := rows.Scan(
+			&ad.ID,
+			&ad.Title,
+			&ad.Description,
+			&ad.ImageURL,
+			&ad.Price,
+			&ad.AuthorLogin,
+			&ad.IsOwner,
+		)
 		if err != nil {
 			return nil, err
 		}
