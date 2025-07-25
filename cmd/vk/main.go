@@ -40,8 +40,6 @@ func main() {
 		Sessions: sessionDB,
 	}
 
-	// authMiddleware := middleware.NewAuthMiddleware(sessionDB)
-
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/signin", u.Registration)
